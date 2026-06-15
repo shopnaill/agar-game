@@ -135,9 +135,12 @@ const _c = new THREE.Color();
 // ---------------------------------------------------------------------------
 // Entity pools (interpolated). Keyed by server entity id.
 // ---------------------------------------------------------------------------
-const cellMeshes = new Map();   // id -> mesh (userData: tx,ty,tr, ownerId)
+const cellMeshes = new Map();   // id -> mesh (userData: tx,ty,tr, ownerId, mine)
 const virusMeshes = new Map();  // id -> mesh (userData: tr)
 const ejectMeshes = new Map();  // id -> mesh
+// Client-side prediction for our own cells: id -> { x,y, vx,vy, sx,sy, mass }
+// (x,y) is the locally predicted position; (sx,sy) the latest server truth.
+const myPred = new Map();
 
 function makeCellMesh(colorHex) {
   const color = new THREE.Color(colorHex);
@@ -363,6 +366,7 @@ function syncEntities(state) {
     seenCells.add(c.i);
     let mesh = cellMeshes.get(c.i);
     const r = massToRadius(c.m);
+    const mine = c.o === myId;
     if (!mesh) {
       mesh = makeCellMesh(c.c);
       mesh.position.set(c.x, r, c.y);
@@ -375,9 +379,15 @@ function syncEntities(state) {
     mesh.userData.tr = r;
     mesh.userData.ownerId = c.o;
     mesh.userData.mass = c.m;
+    mesh.userData.mine = mine;
+    if (mine) {
+      let p = myPred.get(c.i);
+      if (!p) { p = { x: c.x, y: c.y, vx: 0, vy: 0, sx: c.x, sy: c.y, mass: c.m }; myPred.set(c.i, p); }
+      p.sx = c.x; p.sy = c.y; p.mass = c.m;
+    }
   }
   for (const [id, mesh] of cellMeshes) {
-    if (!seenCells.has(id)) { disposeMesh(mesh); cellMeshes.delete(id); }
+    if (!seenCells.has(id)) { disposeMesh(mesh); cellMeshes.delete(id); myPred.delete(id); }
   }
 
   // --- Viruses ---
@@ -435,7 +445,7 @@ function interpolate(dt) {
   const t = 1 - Math.exp(-LERP_RATE * dt);
   for (const mesh of cellMeshes.values()) {
     const u = mesh.userData;
-    if (u.tx === undefined) continue;
+    if (u.tx === undefined || u.mine) continue; // own cells are predicted, not lerped
     const r = lerp(mesh.scale.x, u.tr, t);
     mesh.scale.setScalar(r);
     mesh.position.x = lerp(mesh.position.x, u.tx, t);
@@ -454,6 +464,54 @@ function interpolate(dt) {
     mesh.position.x = lerp(mesh.position.x, u.tx, t);
     mesh.position.z = lerp(mesh.position.z, u.ty, t);
   }
+}
+
+// Predict our own cells locally so movement responds instantly to input,
+// then gently reconcile toward the authoritative server position. Uses the
+// same movement model as the server (see server/game.js moveCells).
+const RECONCILE_RATE = 4;
+function stepMyCells(dt) {
+  const rc = 1 - Math.exp(-RECONCILE_RATE * dt);
+  for (const [id, p] of myPred) {
+    const dx = worldTarget.x - p.x, dy = worldTarget.y - p.y;
+    const dist = Math.hypot(dx, dy);
+    const speed = 320 * Math.pow(20 / Math.max(p.mass, 20), 0.32);
+    if (running && dist > 1) {
+      const nx = dx / dist, ny = dy / dist;
+      const approach = Math.min(speed, dist * 6);
+      p.vx += nx * approach * dt * 8;
+      p.vy += ny * approach * dt * 8;
+    }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    const damp = Math.pow(0.0015, dt);
+    p.vx *= damp; p.vy *= damp;
+    const vlen = Math.hypot(p.vx, p.vy);
+    if (vlen > speed && vlen > 0) {
+      const k = Math.max(0.85, Math.min(1, speed / vlen));
+      p.vx *= k; p.vy *= k;
+    }
+    // Reconcile toward server truth.
+    p.x += (p.sx - p.x) * rc;
+    p.y += (p.sy - p.y) * rc;
+    p.x = Math.max(-WORLD_SIZE, Math.min(WORLD_SIZE, p.x));
+    p.y = Math.max(-WORLD_SIZE, Math.min(WORLD_SIZE, p.y));
+
+    const mesh = cellMeshes.get(id);
+    if (mesh) {
+      const r = massToRadius(p.mass);
+      mesh.scale.setScalar(r);
+      mesh.position.set(p.x, r, p.y);
+    }
+  }
+}
+
+// Mass-weighted centroid of our predicted cells (for the camera).
+function myCentroid() {
+  let x = 0, y = 0, t = 0;
+  for (const p of myPred.values()) { x += p.x * p.mass; y += p.y * p.mass; t += p.mass; }
+  if (t > 0) return { x: x / t, y: y / t, m: t };
+  return null;
 }
 
 // Project visible cells to screen-space name/mass labels.
@@ -489,14 +547,14 @@ function updateLabels(state) {
 const scoreEl = document.getElementById("score");
 const leaderboardList = document.getElementById("leaderboard-list");
 
-function updateCamera(state, dt) {
-  if (!state.me) return;
-  const targetHeight = 700 + Math.pow(Math.max(state.me.m, 1), 0.55) * 70;
+function updateCamera(center, dt) {
+  if (!center) return;
+  const targetHeight = 700 + Math.pow(Math.max(center.m, 1), 0.55) * 70;
   const k = Math.min(1, dt * 6);
-  camera.position.x = lerp(camera.position.x, state.me.x, k);
-  camera.position.z = lerp(camera.position.z, state.me.y, k);
+  camera.position.x = lerp(camera.position.x, center.x, k);
+  camera.position.z = lerp(camera.position.z, center.y, k);
   camera.position.y = lerp(camera.position.y, targetHeight, Math.min(1, dt * 3));
-  camera.lookAt(state.me.x, 0, state.me.y);
+  camera.lookAt(center.x, 0, center.y);
 }
 
 function updateHUD(state) {
@@ -564,10 +622,14 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
 
+  // Refresh the cursor world target every frame so prediction stays responsive.
+  updateWorldTarget();
+
   if (latest) {
     syncEntities(latest);
+    stepMyCells(dt);
     interpolate(dt);
-    updateCamera(latest, dt);
+    updateCamera(myCentroid() || latest.me, dt);
     updateLabels(latest);
     updateHUD(latest);
     drawMinimap(latest);
@@ -578,7 +640,6 @@ function animate() {
     inputAccum += dt;
     if (inputAccum >= 1 / INPUT_HZ) {
       inputAccum = 0;
-      updateWorldTarget();
       send({ t: "input", x: Math.round(worldTarget.x), y: Math.round(worldTarget.y) });
     }
   }

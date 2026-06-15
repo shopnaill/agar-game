@@ -63,7 +63,17 @@ public/
 They send `{t:"input",x,y}` (a world target) at ~20 Hz plus `split`/`eject` actions. The
 server simulates one world and sends each client a `state` snapshot culled to its viewport,
 containing only nearby cells, food, viruses and ejected blobs, plus a global leaderboard.
-The client interpolates entity positions between snapshots for smooth motion.
+The client interpolates other entities between snapshots for smooth motion.
+
+**Responsiveness (latency hiding).** Your *own* cells are predicted on the client using the
+same movement model as the server, so they react to your input instantly and then gently
+reconcile toward the authoritative server position. This keeps controls feeling immediate
+even with meaningful ping to a remote host. On the server, food collision uses a spatial
+grid so each tick stays cheap on low-powered (e.g. free-tier) hosts.
+
+> **Render free tier note:** free instances sleep after ~15 min idle, so the *first* load
+> after inactivity can take 30–60 s to wake (a cold start), and shared CPU adds some jitter.
+> A paid instance (or a periodic keep-alive ping) removes the cold start.
 
 **Bots.** The server keeps the world populated up to `targetPopulation`, spawning AI bots
 when there are few humans and removing them as real players join (see `config.js`).

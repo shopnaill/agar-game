@@ -354,16 +354,38 @@ export class Game {
   handleEating() {
     const actors = [...this.players.values()].filter((a) => !a.dead);
 
+    // Spatial grid over food so each cell only tests nearby pellets
+    // (keeps the hot loop cheap on low-powered hosts).
+    const GS = 300;
+    const gridKey = (gx, gy) => gx * 100000 + gy;
+    const foodGrid = new Map();
+    for (let i = 0; i < this.food.length; i++) {
+      const f = this.food[i];
+      const k = gridKey(Math.floor(f.x / GS), Math.floor(f.y / GS));
+      let bucket = foodGrid.get(k);
+      if (!bucket) { bucket = []; foodGrid.set(k, bucket); }
+      bucket.push(i);
+    }
+
     // Food + ejected blobs
     for (const a of actors) {
       for (const cell of a.cells) {
         const r = cell.radius, r2 = r * r;
-        for (const food of this.food) {
-          const dx = food.x - cell.x, dy = food.y - cell.y;
-          if (dx * dx + dy * dy < r2) {
-            cell.mass += CONFIG.foodMass;
-            const p = randomPos();
-            food.x = p.x; food.y = p.y;
+        const minGx = Math.floor((cell.x - r) / GS), maxGx = Math.floor((cell.x + r) / GS);
+        const minGy = Math.floor((cell.y - r) / GS), maxGy = Math.floor((cell.y + r) / GS);
+        for (let gx = minGx; gx <= maxGx; gx++) {
+          for (let gy = minGy; gy <= maxGy; gy++) {
+            const bucket = foodGrid.get(gridKey(gx, gy));
+            if (!bucket) continue;
+            for (const idx of bucket) {
+              const food = this.food[idx];
+              const dx = food.x - cell.x, dy = food.y - cell.y;
+              if (dx * dx + dy * dy < r2) {
+                cell.mass += CONFIG.foodMass;
+                const p = randomPos();
+                food.x = p.x; food.y = p.y;
+              }
+            }
           }
         }
         for (let k = this.ejected.length - 1; k >= 0; k--) {

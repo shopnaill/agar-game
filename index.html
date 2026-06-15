@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Three.js Agar</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="hud">
+    <div id="score">Mass: 0</div>
+    <div id="leaderboard">
+      <h3>Leaderboard</h3>
+      <ol id="leaderboard-list"></ol>
+    </div>
+  </div>
+
+  <div id="start-screen" class="overlay">
+    <div class="panel">
+      <h1>THREE<span>·</span>AGAR</h1>
+      <p>Eat food and smaller cells to grow. Avoid bigger cells.</p>
+      <input id="name-input" type="text" maxlength="14" placeholder="Enter a name" />
+      <button id="play-button">Play</button>
+      <div class="controls">
+        <span>Move</span> mouse &nbsp;•&nbsp; <span>Split</span> Space &nbsp;•&nbsp; <span>Eject</span> W
+      </div>
+    </div>
+  </div>
+
+  <div id="death-screen" class="overlay hidden">
+    <div class="panel">
+      <h1>You were eaten</h1>
+      <p id="death-stats">Final mass: 0</p>
+      <button id="respawn-button">Play again</button>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

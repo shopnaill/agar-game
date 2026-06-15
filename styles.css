@@ -1,0 +1,222 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0d1117;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #e6edf3;
+  cursor: crosshair;
+}
+
+canvas {
+  display: block;
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#score {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  font-size: 22px;
+  font-weight: 700;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+#leaderboard {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  min-width: 180px;
+  padding: 12px 16px;
+  background: rgba(22, 27, 34, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+}
+
+#leaderboard h3 {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8b949e;
+  margin-bottom: 8px;
+}
+
+#leaderboard ol {
+  list-style: none;
+  counter-reset: rank;
+}
+
+#leaderboard li {
+  counter-increment: rank;
+  font-size: 14px;
+  padding: 3px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#leaderboard li::before {
+  content: counter(rank) ".";
+  color: #8b949e;
+  margin-right: 6px;
+}
+
+#leaderboard li.me {
+  color: #58e08a;
+  font-weight: 700;
+}
+
+#leaderboard li span.mass {
+  color: #8b949e;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Touch buttons (mobile only) ---------- */
+#touch-buttons {
+  position: absolute;
+  right: 18px;
+  bottom: 24px;
+  display: none; /* shown only on touch devices via JS */
+  flex-direction: column;
+  gap: 14px;
+  pointer-events: none;
+}
+
+body.touch #touch-buttons {
+  display: flex;
+}
+
+.touch-btn {
+  pointer-events: auto;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(88, 224, 138, 0.22);
+  color: #e6edf3;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.touch-btn:active {
+  background: rgba(88, 224, 138, 0.45);
+  transform: scale(0.94);
+}
+
+#btn-eject {
+  background: rgba(79, 157, 255, 0.22);
+  width: 64px;
+  height: 64px;
+  align-self: flex-end;
+}
+
+#btn-eject:active {
+  background: rgba(79, 157, 255, 0.45);
+}
+
+/* ---------- Overlays ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, rgba(13, 17, 23, 0.6), rgba(13, 17, 23, 0.95));
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.panel {
+  text-align: center;
+  padding: 40px 48px;
+  background: rgba(22, 27, 34, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  max-width: 420px;
+}
+
+.panel h1 {
+  font-size: 40px;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+.panel h1 span {
+  color: #58e08a;
+}
+
+.panel p {
+  color: #8b949e;
+  margin-bottom: 22px;
+}
+
+.panel input {
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0d1117;
+  color: #e6edf3;
+  text-align: center;
+  outline: none;
+}
+
+.panel input:focus {
+  border-color: #58e08a;
+}
+
+.panel button {
+  width: 100%;
+  padding: 13px;
+  font-size: 17px;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  background: #58e08a;
+  color: #07140c;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+
+.panel button:hover {
+  background: #6cf09c;
+}
+
+.panel button:active {
+  transform: scale(0.98);
+}
+
+.controls {
+  margin-top: 20px;
+  font-size: 13px;
+  color: #6e7681;
+}
+
+.controls span {
+  color: #e6edf3;
+  font-weight: 600;
+}

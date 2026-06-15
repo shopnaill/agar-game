@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    name: Lint & smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Syntax-check all JavaScript
+        run: |
+          for f in server/config.js server/game.js server/index.js public/main.js; do
+            echo "checking $f"
+            node --check "$f"
+          done
+
+      - name: Server boot smoke test
+        run: |
+          PORT=3000 node server/index.js &
+          SRV=$!
+          # Wait for the HTTP server to come up (max ~10s).
+          for i in $(seq 1 20); do
+            if curl -sf -o /dev/null http://localhost:3000/; then
+              echo "server responded"
+              break
+            fi
+            sleep 0.5
+          done
+          # Assert the client and vendored Three.js are served.
+          curl -sf -o /dev/null http://localhost:3000/ || { echo "index.html failed"; kill $SRV; exit 1; }
+          curl -sf -o /dev/null http://localhost:3000/main.js || { echo "main.js failed"; kill $SRV; exit 1; }
+          curl -sf -o /dev/null http://localhost:3000/vendor/three.module.js || { echo "vendor failed"; kill $SRV; exit 1; }
+          echo "smoke test passed"
+          kill $SRV

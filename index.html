@@ -8,7 +8,7 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      "three": "./vendor/three.module.js"
     }
   }
   </script>
@@ -20,6 +20,11 @@
       <h3>Leaderboard</h3>
       <ol id="leaderboard-list"></ol>
     </div>
+    <!-- Touch-only action buttons -->
+    <div id="touch-buttons">
+      <button id="btn-eject" class="touch-btn">Eject</button>
+      <button id="btn-split" class="touch-btn">Split</button>
+    </div>
   </div>
 
   <div id="start-screen" class="overlay">
@@ -29,7 +34,7 @@
       <input id="name-input" type="text" maxlength="14" placeholder="Enter a name" />
       <button id="play-button">Play</button>
       <div class="controls">
-        <span>Move</span> mouse &nbsp;•&nbsp; <span>Split</span> Space &nbsp;•&nbsp; <span>Eject</span> W
+        <span>Move</span> mouse / drag &nbsp;•&nbsp; <span>Split</span> Space &nbsp;•&nbsp; <span>Eject</span> W
       </div>
     </div>
   </div>

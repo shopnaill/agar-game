@@ -32,7 +32,15 @@ const CONFIG = {
   ejectCost: 18,
   ejectSpeed: 1600,
   decayRate: 0.002,       // passive mass decay per second per mass unit
+  // Viruses (green spikes that pop big cells)
+  virusCount: 14,
+  virusMass: 130,         // a cell must be larger than this to risk popping
+  virusEatRatio: 1.15,    // cell.mass > virus.mass * ratio to trigger a pop
+  virusPopPieces: 8,      // max fragments a popped cell bursts into
+  virusRespawnDelay: 8,   // seconds before a consumed virus respawns
 };
+
+const VIRUS_COLOR = 0x33d17a;
 
 const NAMES = [
   "Blobby", "Nibbles", "Mr. Big", "Voracious", "Tiny", "Gulp",
@@ -58,6 +66,42 @@ function randomPosition() {
   const m = CONFIG.worldSize * 0.95;
   return new THREE.Vector2(rand(-m, m), rand(-m, m));
 }
+
+// ---------------------------------------------------------------------------
+// Sound — tiny WebAudio synth (no asset files needed).
+// ---------------------------------------------------------------------------
+const Sound = {
+  ctx: null,
+  enabled: true,
+  init() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) this.ctx = new AC();
+  },
+  // Play a short tone. type: oscillator wave; freq sweeps from f0 to f1.
+  tone(f0, f1, dur, type = "sine", gain = 0.12) {
+    if (!this.enabled || !this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f0, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), now + dur);
+    env.gain.setValueAtTime(0.0001, now);
+    env.gain.exponentialRampToValueAtTime(gain, now + 0.01);
+    env.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    osc.connect(env).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + dur + 0.02);
+  },
+  eat() { this.tone(440, 660, 0.08, "sine", 0.05); },
+  eatCell() { this.tone(300, 520, 0.16, "triangle", 0.14); },
+  split() { this.tone(520, 240, 0.14, "sawtooth", 0.1); },
+  eject() { this.tone(360, 180, 0.1, "square", 0.06); },
+  pop() { this.tone(220, 90, 0.3, "sawtooth", 0.18); },
+  death() { this.tone(330, 70, 0.6, "sawtooth", 0.2); },
+};
 
 // ---------------------------------------------------------------------------
 // Scene setup
@@ -107,6 +151,22 @@ scene.add(makeBoundary());
 // Shared geometry for spheres (reused, scaled per-cell)
 const sphereGeo = new THREE.SphereGeometry(1, 24, 18);
 const foodGeo = new THREE.SphereGeometry(1, 8, 6);
+
+// Spiky virus geometry: a sphere whose alternating vertices are pushed outward.
+function makeVirusGeometry() {
+  const geo = new THREE.SphereGeometry(1, 22, 16);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const spike = i % 2 === 0 ? 1.32 : 0.92; // alternate out/in for a spiked look
+    v.multiplyScalar(spike);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+const virusGeo = makeVirusGeometry();
 
 // ---------------------------------------------------------------------------
 // Game entities
@@ -241,6 +301,48 @@ class Ejected {
   }
 }
 
+// Virus — a green spiky cell. Bigger cells that touch it get popped apart.
+class Virus {
+  constructor() {
+    this.mass = CONFIG.virusMass;
+    this.dead = false;
+    this.respawnTimer = 0;
+    const mat = new THREE.MeshStandardMaterial({
+      color: VIRUS_COLOR,
+      emissive: new THREE.Color(VIRUS_COLOR).multiplyScalar(0.25),
+      roughness: 0.5,
+      flatShading: true,
+    });
+    this.mesh = new THREE.Mesh(virusGeo, mat);
+    scene.add(this.mesh);
+    this.respawn();
+  }
+
+  get radius() {
+    return massToRadius(this.mass);
+  }
+
+  respawn() {
+    this.pos = randomPosition();
+    this.dead = false;
+    this.mesh.visible = true;
+    const r = this.radius;
+    this.mesh.scale.setScalar(r);
+    this.mesh.position.set(this.pos.x, r, this.pos.y);
+  }
+
+  consume() {
+    // Hide and schedule a respawn elsewhere.
+    this.dead = true;
+    this.mesh.visible = false;
+    this.respawnTimer = CONFIG.virusRespawnDelay;
+  }
+
+  spin(dt) {
+    if (!this.dead) this.mesh.rotation.y += dt * 0.6;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Game state
 // ---------------------------------------------------------------------------
@@ -250,6 +352,7 @@ const state = {
   bots: [],
   food: [],
   ejected: [],
+  viruses: [],
   mouse: new THREE.Vector2(0, 0), // world-space target for the player
   cameraScale: 1,
 };
@@ -257,6 +360,11 @@ const state = {
 function spawnFood() {
   state.food = [];
   for (let i = 0; i < CONFIG.foodCount; i++) state.food.push(new Food());
+}
+
+function spawnViruses() {
+  state.viruses = [];
+  for (let i = 0; i < CONFIG.virusCount; i++) state.viruses.push(new Virus());
 }
 
 function spawnBots() {
@@ -278,8 +386,14 @@ function startGame(playerName) {
   }
   for (const e of state.ejected) e.dispose();
   state.ejected = [];
+  for (const v of state.viruses) {
+    scene.remove(v.mesh);
+    v.mesh.material.dispose();
+  }
+  state.viruses = [];
 
   spawnFood();
+  spawnViruses();
   spawnBots();
 
   state.player = new Actor(playerName || "You", pick(COLORS), false);
@@ -318,6 +432,45 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+// --- Touch controls (mobile): drag to steer + on-screen buttons ---
+const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+if (isTouch) document.body.classList.add("touch");
+
+function steerFromTouch(e) {
+  // Use the first touch that isn't on an action button.
+  let t = null;
+  for (const touch of e.touches) {
+    if (!(touch.target && touch.target.closest && touch.target.closest(".touch-btn"))) {
+      t = touch;
+      break;
+    }
+  }
+  if (!t) return;
+  const cx = window.innerWidth / 2;
+  const cy = window.innerHeight / 2;
+  let dx = t.clientX - cx;
+  let dy = t.clientY - cy;
+  const len = Math.hypot(dx, dy) || 1;
+  // Joystick-style: direction from screen center, with a soft dead-zone.
+  const scale = Math.min(1, len / (Math.min(cx, cy) * 0.6));
+  pointer.x = (dx / len) * scale;
+  pointer.y = -(dy / len) * scale;
+}
+window.addEventListener("touchstart", steerFromTouch, { passive: true });
+window.addEventListener("touchmove", steerFromTouch, { passive: true });
+
+function bindAction(id, action) {
+  const el = document.getElementById(id);
+  const fire = (ev) => {
+    ev.preventDefault();
+    if (state.running && state.player && !state.player.dead) action(state.player, state.mouse);
+  };
+  el.addEventListener("touchstart", fire, { passive: false });
+  el.addEventListener("mousedown", fire);
+}
+bindAction("btn-split", splitActor);
+bindAction("btn-eject", ejectMass);
+
 // ---------------------------------------------------------------------------
 // Actions: split & eject
 // ---------------------------------------------------------------------------
@@ -340,6 +493,7 @@ function splitActor(actor, aimWorld) {
     child.vel.copy(dir).multiplyScalar(CONFIG.splitImpulse);
     newCells.push(child);
   }
+  if (newCells.length && actor === state.player) Sound.split();
   actor.cells.push(...newCells);
 }
 
@@ -354,6 +508,7 @@ function ejectMass(actor, aimWorld) {
     const spawnPos = cell.pos.clone().addScaledVector(dir, cell.radius + 12);
     const vel = dir.clone().multiplyScalar(CONFIG.ejectSpeed);
     state.ejected.push(new Ejected(spawnPos, vel, actor.color));
+    if (actor === state.player) Sound.eject();
   }
 }
 
@@ -447,6 +602,7 @@ function handleEating() {
         if (dx * dx + dy * dy < r * r) {
           cell.mass += food.mass;
           food.reposition();
+          if (actor === state.player) Sound.eat();
         }
       }
       // --- Cells eat ejected blobs ---
@@ -479,6 +635,7 @@ function handleEating() {
             ca.mass += cb.mass;
             cb.dispose();
             b.cells.splice(k, 1);
+            if (a === state.player || b === state.player) Sound.eatCell();
           }
         }
       }
@@ -494,6 +651,61 @@ function handleEating() {
   }
   if (state.player && !state.player.dead && state.player.cells.length === 0) {
     onPlayerDeath();
+  }
+}
+
+// Burst one cell into many fragments (when it eats a virus).
+function popCell(actor, cell) {
+  if (actor.cells.indexOf(cell) === -1) return;
+  // Fragment count limited by the remaining cell budget.
+  const budget = CONFIG.maxCells - actor.cells.length;
+  const pieces = Math.min(CONFIG.virusPopPieces, budget + 1);
+  if (pieces <= 1) {
+    cell.mergeTimer = CONFIG.mergeCooldown;
+    return;
+  }
+
+  const fragMass = cell.mass / pieces;
+  cell.mass = fragMass;
+  cell.mergeTimer = CONFIG.mergeCooldown;
+
+  for (let i = 1; i < pieces; i++) {
+    const ang = (i / pieces) * Math.PI * 2 + Math.random() * 0.6;
+    const dir = new THREE.Vector2(Math.cos(ang), Math.sin(ang));
+    const frag = new Cell(actor, fragMass, cell.pos.clone(), actor.color);
+    frag.mergeTimer = CONFIG.mergeCooldown;
+    frag.vel.copy(dir).multiplyScalar(CONFIG.splitImpulse * 0.9);
+    actor.cells.push(frag);
+  }
+}
+
+// Viruses pop oversized cells on contact, then respawn on a timer.
+function handleViruses(dt) {
+  const actors = [state.player, ...state.bots].filter((a) => a && !a.dead);
+  for (const virus of state.viruses) {
+    virus.spin(dt);
+    if (virus.dead) {
+      virus.respawnTimer -= dt;
+      if (virus.respawnTimer <= 0) virus.respawn();
+      continue;
+    }
+    for (const actor of actors) {
+      let popped = false;
+      for (const cell of [...actor.cells]) {
+        if (cell.mass <= virus.mass * CONFIG.virusEatRatio) continue;
+        const dx = virus.pos.x - cell.pos.x;
+        const dy = virus.pos.y - cell.pos.y;
+        if (dx * dx + dy * dy < cell.radius * cell.radius) {
+          cell.mass += virus.mass; // absorb the virus mass, then burst
+          popCell(actor, cell);
+          virus.consume();
+          if (actor === state.player) Sound.pop();
+          popped = true;
+          break;
+        }
+      }
+      if (popped) break;
+    }
   }
 }
 
@@ -665,19 +877,27 @@ const nameInput = document.getElementById("name-input");
 
 function onPlayerDeath() {
   const finalMass = Math.floor(state.player.totalMass) || 0;
+  Sound.death();
   state.player.remove();
   deathStats.textContent = `Final mass: ${finalMass}`;
   deathScreen.classList.remove("hidden");
 }
 
+function beginGame() {
+  // Audio can only start from a user gesture.
+  Sound.init();
+  if (Sound.ctx && Sound.ctx.state === "suspended") Sound.ctx.resume();
+  startGame(nameInput.value.trim());
+}
+
 document.getElementById("play-button").addEventListener("click", () => {
   startScreen.classList.add("hidden");
-  startGame(nameInput.value.trim());
+  beginGame();
 });
 
 document.getElementById("respawn-button").addEventListener("click", () => {
   deathScreen.classList.add("hidden");
-  startGame(nameInput.value.trim());
+  beginGame();
 });
 
 nameInput.addEventListener("keydown", (e) => {
@@ -707,6 +927,7 @@ function animate() {
 
     updateEjected(dt);
     handleEating();
+    handleViruses(dt);
     respawnDeadBots(dt);
 
     syncAllMeshes();

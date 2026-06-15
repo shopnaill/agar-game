@@ -7,28 +7,32 @@ cell, eat food and smaller players to grow, and avoid getting swallowed by bigge
 
 ## Features
 
-- 🎯 **Mouse-follow movement** — your cell chases the cursor; bigger cells move slower.
+- 🎯 **Mouse / drag movement** — your cell chases the cursor; bigger cells move slower.
 - 🍬 **Food & growth** — hundreds of pellets to absorb across a large world.
 - 🤖 **AI bots** — opponents that hunt smaller cells, flee bigger ones, and respawn.
 - ✂️ **Split (Space)** — launch a copy of your cell to chase prey or escape.
 - 💨 **Eject mass (W)** — spit out a small blob.
+- 🦠 **Viruses** — green spikes that burst oversized cells into pieces.
+- 📱 **Mobile/touch controls** — drag to steer, plus on-screen Split/Eject buttons.
+- 🔊 **Sound effects** — synthesized WebAudio cues (no asset files).
 - 📷 **Dynamic camera** — zooms out as you grow.
 - 🏆 **Live leaderboard** and mass counter.
 - 💀 **Death & respawn** screens.
+- 📦 **Offline-ready** — Three.js is vendored locally in `vendor/`.
 
 ## Controls
 
-| Action      | Input        |
-|-------------|--------------|
-| Move        | Mouse        |
-| Split       | `Space`      |
-| Eject mass  | `W`          |
+| Action      | Desktop      | Mobile              |
+|-------------|--------------|---------------------|
+| Move        | Mouse        | Drag anywhere       |
+| Split       | `Space`      | **Split** button    |
+| Eject mass  | `W`          | **Eject** button    |
 
 ## Running it
 
-The game uses native ES modules and loads Three.js from a CDN, so it must be served
-over HTTP (opening `index.html` directly via `file://` won't work because of module
-CORS rules). Any static server works:
+The game uses native ES modules (Three.js is vendored in `vendor/`, so no internet is
+required at runtime). It still must be served over HTTP — opening `index.html` directly
+via `file://` won't work because of module CORS rules. Any static server works:
 
 ```bash
 # Python 3
@@ -43,9 +47,10 @@ Then open <http://localhost:8000> in your browser.
 ## Project structure
 
 ```
-index.html   # markup, import map, HUD & overlays
-styles.css   # HUD, overlays, and layout styling
-main.js      # game logic: scene, entities, physics, AI, camera
+index.html              # markup, import map, HUD, overlays & touch buttons
+styles.css              # HUD, overlays, touch controls, and layout styling
+main.js                 # game logic: scene, entities, physics, AI, viruses, sound, camera
+vendor/three.module.js  # vendored Three.js (r160) for offline use
 ```
 
 ## Tuning

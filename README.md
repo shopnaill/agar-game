@@ -1,24 +1,27 @@
 # Three·Agar
 
-An [agar.io](https://agar.io)-style browser game built with **Three.js**. Control a
-cell, eat food and smaller players to grow, and avoid getting swallowed by bigger ones.
+A **multiplayer** [agar.io](https://agar.io)-style browser game built with **Three.js**
+and an authoritative **Node.js + WebSocket** server. Control a cell, eat food and smaller
+players to grow, and avoid getting swallowed by bigger ones — live against other people online.
 
 ![status](https://img.shields.io/badge/built%20with-three.js-58e08a)
+![server](https://img.shields.io/badge/server-node%20%2B%20ws-4f9dff)
 
 ## Features
 
+- 🌐 **Real-time multiplayer** — authoritative server runs one shared world; clients send
+  input and render viewport-culled snapshots at 25 Hz with smooth interpolation.
 - 🎯 **Mouse / drag movement** — your cell chases the cursor; bigger cells move slower.
 - 🍬 **Food & growth** — hundreds of pellets to absorb across a large world.
-- 🤖 **AI bots** — opponents that hunt smaller cells, flee bigger ones, and respawn.
-- ✂️ **Split (Space)** — launch a copy of your cell to chase prey or escape.
-- 💨 **Eject mass (W)** — spit out a small blob.
+- 🤖 **AI bots** — fill empty servers and back off as real players join; they hunt smaller
+  cells, flee bigger ones, split to chase, and respawn.
+- ✂️ **Split (Space)** and 💨 **eject mass (W)**, with a merge cooldown.
 - 🦠 **Viruses** — green spikes that burst oversized cells into pieces.
+- 🏷️ **Name + mass labels** floating on every cell, and a 🗺️ **minimap**.
 - 📱 **Mobile/touch controls** — drag to steer, plus on-screen Split/Eject buttons.
 - 🔊 **Sound effects** — synthesized WebAudio cues (no asset files).
-- 📷 **Dynamic camera** — zooms out as you grow.
-- 🏆 **Live leaderboard** and mass counter.
-- 💀 **Death & respawn** screens.
-- 📦 **Offline-ready** — Three.js is vendored locally in `vendor/`.
+- 📷 **Dynamic camera**, 🏆 **live leaderboard**, 💀 **death & respawn** screens.
+- 📦 **Offline-ready client** — Three.js is vendored locally in `public/vendor/`.
 
 ## Controls
 
@@ -28,32 +31,62 @@ cell, eat food and smaller players to grow, and avoid getting swallowed by bigge
 | Split       | `Space`      | **Split** button    |
 | Eject mass  | `W`          | **Eject** button    |
 
-## Running it
+## Running locally
 
-The game uses native ES modules (Three.js is vendored in `vendor/`, so no internet is
-required at runtime). It still must be served over HTTP — opening `index.html` directly
-via `file://` won't work because of module CORS rules. Any static server works:
+Requires **Node.js 18+**. The server hosts both the game simulation and the static client,
+so you only run one process:
 
 ```bash
-# Python 3
-python3 -m http.server 8000
-
-# or Node
-npx serve .
+npm install
+npm start
+# then open http://localhost:3000
 ```
 
-Then open <http://localhost:8000> in your browser.
+Open the URL in several tabs (or on other devices on your LAN via your machine's IP) to
+play against yourself, alongside the AI bots. Use `npm run dev` for auto-restart on changes.
 
-## Project structure
+## Architecture
 
 ```
-index.html              # markup, import map, HUD, overlays & touch buttons
-styles.css              # HUD, overlays, touch controls, and layout styling
-main.js                 # game logic: scene, entities, physics, AI, viruses, sound, camera
-vendor/three.module.js  # vendored Three.js (r160) for offline use
+server/
+  index.js   # HTTP static server + WebSocket layer + 25 Hz simulation/broadcast loop
+  game.js    # authoritative world: cells, food, viruses, ejected mass, bots, eating
+  config.js  # tunable constants (world, speeds, viruses, bot population)
+public/
+  index.html              # markup, import map, HUD, overlays, minimap, touch buttons
+  styles.css              # HUD, labels, minimap, touch controls, layout
+  main.js                 # networked renderer: WebSocket, interpolation, labels, camera
+  vendor/three.module.js  # vendored Three.js (r160)
 ```
+
+**Networking.** Clients connect over WebSocket to the same origin that served the page.
+They send `{t:"input",x,y}` (a world target) at ~20 Hz plus `split`/`eject` actions. The
+server simulates one world and sends each client a `state` snapshot culled to its viewport,
+containing only nearby cells, food, viruses and ejected blobs, plus a global leaderboard.
+The client interpolates entity positions between snapshots for smooth motion.
+
+**Bots.** The server keeps the world populated up to `targetPopulation`, spawning AI bots
+when there are few humans and removing them as real players join (see `config.js`).
+
+## Deploying online
+
+The repo includes ready-to-use config for container or PaaS hosts. The server listens on
+`process.env.PORT` (default `3000`).
+
+- **Docker**
+  ```bash
+  docker build -t three-agar .
+  docker run -p 3000:3000 three-agar
+  ```
+- **Render** — `render.yaml` is a deploy blueprint; create a new Blueprint service pointed
+  at this repo and it provisions automatically. (WebSockets work out of the box.)
+- **Railway / Fly.io / Heroku-style** — any host that runs `npm install && npm start` and
+  injects `PORT` will work. Make sure the host supports WebSocket upgrades (most do).
+
+> When deployed behind HTTPS, the client automatically uses `wss://` for the socket.
 
 ## Tuning
 
-Gameplay constants (world size, food count, bot count, speeds, split/eject costs,
-mass decay, etc.) live in the `CONFIG` object at the top of `main.js`. Tweak and reload.
+Gameplay constants (world size, food/virus/bot counts, speeds, split/eject costs, mass
+decay, bot population, view size) live in `server/config.js`. Presentation-only knobs
+(interpolation rate, input send rate) are at the top of `public/main.js`.

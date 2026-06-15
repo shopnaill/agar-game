@@ -1,0 +1,18 @@
+{
+  "name": "three-agar",
+  "version": "1.0.0",
+  "description": "A multiplayer agar.io-style game built with Three.js and an authoritative Node.js WebSocket server.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
+  },
+  "license": "MIT"
+}

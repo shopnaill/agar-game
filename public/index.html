@@ -14,12 +14,17 @@
   </script>
 </head>
 <body>
+  <!-- Name/mass labels are projected here over the 3D canvas -->
+  <div id="labels"></div>
+
   <div id="hud">
     <div id="score">Mass: 0</div>
+    <div id="connection" class="hidden">Connecting…</div>
     <div id="leaderboard">
       <h3>Leaderboard</h3>
       <ol id="leaderboard-list"></ol>
     </div>
+    <canvas id="minimap" width="180" height="180"></canvas>
     <!-- Touch-only action buttons -->
     <div id="touch-buttons">
       <button id="btn-eject" class="touch-btn">Eject</button>
@@ -30,7 +35,7 @@
   <div id="start-screen" class="overlay">
     <div class="panel">
       <h1>THREE<span>·</span>AGAR</h1>
-      <p>Eat food and smaller cells to grow. Avoid bigger cells.</p>
+      <p>Eat food and smaller cells to grow. Avoid bigger cells. Play live against others online.</p>
       <input id="name-input" type="text" maxlength="14" placeholder="Enter a name" />
       <button id="play-button">Play</button>
       <div class="controls">
